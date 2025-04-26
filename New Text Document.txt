@@ -1,0 +1,39 @@
+let
+    // File Paths
+    FileName = "\base\base_inventory.xlsx",
+    LocalPath = "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+    File = SourceFolder & FileName,
+
+    // Load workbooks
+    Source = Excel.Workbook(File.Contents(PathToUse & File), null, true),
+    _TBL_FREEBIES_SET_Table = Source{[Item="_TBL_FREEBIES_SET", Kind="Table"]}[Data],
+    _TBL_FREEBIES_CATALOG = Source{[Item="_TBL_FREEBIES_CATALOG", Kind="Table"]}[Data],
+
+    // Change types for the FREEBIES_SET table
+    #"Changed Type" = Table.TransformColumnTypes(_TBL_FREEBIES_SET_Table, {{"ID", type any}, {"FREEBIES NAME", type text}}),
+
+    // Filter out rows where 'INVENTORY ID' is null in the FREEBIES_CATALOG table
+    #"Filtered Rows1" = Table.SelectRows(_TBL_FREEBIES_CATALOG, each ([INVENTORY ID] <> null)),
+
+    // Group by FREEBIES SET ID and concatenate the 'INVENTORY ID' values
+    GroupedCatalog = Table.Group(#"Filtered Rows1", {"FREEBIES SET ID"}, {{"Concatenated Inventory IDs", each Text.Combine(List.Transform([INVENTORY ID], Text.From), ", "), type text}}),
+
+    // Merge the grouped results with the _TBL_FREEBIES_SET table on the matching 'ID' and 'FREEBIES SET ID'
+    MergedTables = Table.NestedJoin(#"Changed Type", "ID", GroupedCatalog, "FREEBIES SET ID", "NewDetails", JoinKind.LeftOuter),
+
+    // Expand the merged table to bring in the concatenated inventory IDs into the DETAILS column
+    ExpandedDetails = Table.ExpandTableColumn(MergedTables, "NewDetails", {"Concatenated Inventory IDs"}, {"DETAILS"}),
+
+    // Optionally, filter rows where 'DETAILS' is not null or empty
+    #"Filtered Rows" = Table.SelectRows(ExpandedDetails, each ([DETAILS] <> null and [DETAILS] <> ""))
+
+in
+    #"Filtered Rows"
+
+
+
+DOWNPAYMENT	BALANCE	Shipping Fee	Receivable
