@@ -1,0 +1,269 @@
+let
+    //FileName
+    FileName = "\base\base_inventory.xlsx",
+
+    //Path
+    LocalPath =  "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+    
+    File= SourceFolder & FileName,
+   
+    // Load workbooks
+    Source= Excel.Workbook(File.Contents(PathToUse & File), null, true),
+    _TBL_INVENTORY_Table = Source{[Item="_TBL_INVENTORY",Kind="Table"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(_TBL_INVENTORY_Table,{{"ID", Int64.Type}, {"NAME", type text}, {"TYPE", type text}, {"BRAND", type text}, {"CODE", type text}, {"SPECS", type text}}),
+    #"Filtered Rows" = Table.SelectRows(#"Changed Type", each ([NAME] <> ""))
+in
+    #"Filtered Rows"
+
+
+
+
+
+
+let
+    // File names
+    FileName1 = "\office 2\DAILY_INVENTORY_LAPTOP_AND_PC.xlsm",
+    FileName2 = "\office 2\DAILY_INVENTORY_FREEBIES_AND_ADD_ONS.xlsm",
+
+    // Path definitions
+    LocalPath = "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+
+    // File paths
+    LaptopFile = SourceFolder & FileName1,
+    FreebiesFile = SourceFolder & FileName2,
+
+    // Load workbooks
+    SourceLaptop = Excel.Workbook(File.Contents(PathToUse & LaptopFile), null, true),
+    SourceFreebies = Excel.Workbook(File.Contents(PathToUse & FreebiesFile), null, true),
+
+    // Extract tables
+    LaptopTable = SourceLaptop{[Item="LAPTOP_PRODUCTION", Kind="Table"]}[Data],
+    #"Filtered Rows" = Table.SelectRows(LaptopTable, each ([TYPE] <> null and [TYPE] <> 0)),
+    PCTable = SourceLaptop{[Item="PC_INVENTORY", Kind="Table"]}[Data],
+    PrinterTable = SourceLaptop{[Item="PRINTER_INVENTORY", Kind="Table"]}[Data],
+    AddOnsTable = SourceFreebies{[Item="FREEBIES_INVENTORY", Kind="Table"]}[Data],
+    #"Merged Columns" = Table.CombineColumns(Table.TransformColumnTypes(AddOnsTable, {{"REMARKS", type text}}, "en-US"),{"REMARKS", "CONTENT"},Combiner.CombineTextByDelimiter("", QuoteStyle.None),"REMARKS"),
+    // Split laptops by OS type based on REMARKS or any other available column logic
+    LaptopWindows = Table.SelectRows(#"Filtered Rows", each Text.Contains(Text.Upper([TYPE] as text), "WINDOWS")),
+    LaptopChromebook = Table.SelectRows(#"Filtered Rows", each Text.Contains(Text.Upper([TYPE] as text), "CHROME")),
+
+    // Combine both laptop types
+    AllLaptops = Table.Combine({LaptopWindows ,LaptopChromebook}),
+    #"Filtered Rows1" = Table.SelectRows(AllLaptops, each ([IN] <> null and [IN] <> 0)),
+
+    // Add "TYPE" to other inventories
+    PCWithType = Table.AddColumn(PCTable, "TYPE", each "PC"),
+    PrinterWithType = Table.AddColumn(PrinterTable, "TYPE", each "Printer"),
+    AddOnsWithType = Table.AddColumn(#"Merged Columns", "TYPE", each "Add Ons"),
+
+    // Select and format columns
+    CommonColumns = {"DATE", "INVENTORY ITEM", "OUT", "REMARKS", "BOX ID", "TYPE"},
+    LaptopSelected = Table.SelectColumns(#"Filtered Rows1", CommonColumns),
+    PCSelected = Table.SelectColumns(PCWithType, CommonColumns),
+    PrinterSelected = Table.SelectColumns(PrinterWithType, CommonColumns),
+    AddOnsSelected = Table.SelectColumns(AddOnsWithType, CommonColumns),
+
+    // Apply consistent data types
+    CommonTypeTransform = {
+        {"DATE", type date},
+        {"INVENTORY ITEM", type text},
+        {"OUT", Int64.Type},
+        {"REMARKS", type text},
+        {"BOX ID", type text},
+        {"TYPE", type text}
+    },
+    LaptopTyped = Table.TransformColumnTypes(LaptopSelected, CommonTypeTransform),
+    PCTyped = Table.TransformColumnTypes(PCSelected, CommonTypeTransform),
+    PrinterTyped = Table.TransformColumnTypes(PrinterSelected, CommonTypeTransform),
+    FreebieTyped = Table.TransformColumnTypes(AddOnsSelected, CommonTypeTransform),
+
+    // Filter rows (remove TOTAL and null OUTs)
+    LaptopFiltered = Table.SelectRows(LaptopTyped, each ([INVENTORY ITEM] <> "TOTAL: ") and ([OUT] <> null)),
+    PCFiltered = Table.SelectRows(PCTyped, each ([INVENTORY ITEM] <> "TOTAL: ") and ([OUT] <> null)),
+    PrinterFiltered = Table.SelectRows(PrinterTyped, each ([INVENTORY ITEM] <> "TOTAL: ") and ([OUT] <> null)),
+    FreebieFiltered = Table.SelectRows(FreebieTyped, each ([INVENTORY ITEM] <> "TOTAL: ") and ([OUT] <> null)),
+
+    // Combine all inventories
+    MergedInventory = Table.Combine({LaptopFiltered, PCFiltered, PrinterFiltered, FreebieFiltered}),
+    SortedInventory = Table.Sort(MergedInventory, {{"DATE", Order.Ascending}, {"INVENTORY ITEM", Order.Ascending}}),
+
+    // Final output
+    FinalTable = Table.ReorderColumns(SortedInventory, {"DATE", "INVENTORY ITEM", "TYPE", "OUT", "REMARKS", "BOX ID"})
+in
+    FinalTable
+
+
+
+
+
+
+
+
+
+
+let
+        //FileName
+    FileName = "\base\base_inventory.xlsx",
+
+    //Path
+    LocalPath =  "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+    
+    File= SourceFolder & FileName,
+   
+    // Load workbooks
+    Source= Excel.Workbook(File.Contents(PathToUse & File), null, true),
+    _TBL_ADD_ONS_Table = Source{[Item="_TBL_ADD_ONS",Kind="Table"]}[Data],
+    #"Changed Type" = Table.TransformColumnTypes(_TBL_ADD_ONS_Table,{{"ID", Int64.Type}, {"ADD ON NAME", type text}, {"ADD ON PRICE", Int64.Type}}),
+    #"Filtered Rows" = Table.SelectRows(#"Changed Type", each ([ID] <> null) and ([ADD ON PRICE] <> null))
+in
+    #"Filtered Rows"
+
+
+
+
+
+
+
+
+
+
+
+
+let
+    // File Paths
+    FileName = "\base\base_inventory.xlsx",
+    LocalPath = "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+    File = SourceFolder & FileName,
+
+    // Load workbooks
+    Source = Excel.Workbook(File.Contents(PathToUse & File), null, true),
+    _TBL_FREEBIES_SET_Table = Source{[Item="_TBL_FREEBIES_SET", Kind="Table"]}[Data],
+    _TBL_FREEBIES_CATALOG = Source{[Item="_TBL_FREEBIES_CATALOG", Kind="Table"]}[Data],
+
+    // Change types for the FREEBIES_SET table
+    #"Changed Type" = Table.TransformColumnTypes(_TBL_FREEBIES_SET_Table, {{"ID", type any}, {"FREEBIES NAME", type text}}),
+
+    // Filter out rows where 'INVENTORY ID' is null in the FREEBIES_CATALOG table
+    #"Filtered Rows1" = Table.SelectRows(_TBL_FREEBIES_CATALOG, each ([INVENTORY ID] <> null)),
+
+    // Group by FREEBIES SET ID and concatenate the 'INVENTORY ID' values
+    GroupedCatalog = Table.Group(#"Filtered Rows1", {"FREEBIES SET ID"}, {{"Concatenated Inventory IDs", each Text.Combine(List.Transform([INVENTORY ID], Text.From), ", "), type text}}),
+
+    // Merge the grouped results with the _TBL_FREEBIES_SET table on the matching 'ID' and 'FREEBIES SET ID'
+    MergedTables = Table.NestedJoin(#"Changed Type", "ID", GroupedCatalog, "FREEBIES SET ID", "NewDetails", JoinKind.LeftOuter),
+
+    // Expand the merged table to bring in the concatenated inventory IDs into the DETAILS column
+    ExpandedDetails = Table.ExpandTableColumn(MergedTables, "NewDetails", {"Concatenated Inventory IDs"}, {"DETAILS"}),
+
+    // Optionally, filter rows where 'DETAILS' is not null or empty
+    #"Filtered Rows" = Table.SelectRows(ExpandedDetails, each ([DETAILS] <> null and [DETAILS] <> ""))
+
+in
+    #"Filtered Rows"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+let
+    // File Paths
+    FileNameWalkIn = "\office 1\daily_sales_walk_in.xlsm",
+    FileNameLalamove = "\office 1\daily_sales_lalamove.xlsm",
+    FileNameLBC = "\office 1\daily_sales_lbc.xlsm",
+    LocalPath = "C:\",
+    ServerPath = "\\main-server",
+    SourceFolder = "\__users__\__management__\real_enterprise",
+    tryServer = try Folder.Files(ServerPath & SourceFolder),
+    PathToUse = if tryServer[HasError] then LocalPath else ServerPath,
+
+    // Load workbooks
+    SourceWalkIn = Excel.Workbook(File.Contents(PathToUse & SourceFolder & FileNameWalkIn), null, true),
+    _TBL_SALES_WALKIN = SourceWalkIn{[Item="_TBL_SALES", Kind="Table"]}[Data],
+
+    SourceLalamove = Excel.Workbook(File.Contents(PathToUse & SourceFolder & FileNameLalamove), null, true),
+    _TBL_SALES_LALAMOVE = SourceLalamove{[Item="_TBL_SALES", Kind="Table"]}[Data],
+
+    SourceLBC = Excel.Workbook(File.Contents(PathToUse & SourceFolder & FileNameLBC), null, true),
+    _TBL_SALES_LBC = SourceLBC{[Item="_TBL_SALES", Kind="Table"]}[Data],
+
+    // Add source columns
+    AddSourceWalkIn = Table.AddColumn(_TBL_SALES_WALKIN, "SOURCE", each "WALK-IN"),
+    AddSourceLalamove = Table.AddColumn(_TBL_SALES_LALAMOVE, "SOURCE", each "LALAMOVE"),
+    AddSourceLBC = Table.AddColumn(_TBL_SALES_LBC, "SOURCE", each "LBC"),
+
+    // Safely convert date and other types
+    FixTypesWalkIn = Table.TransformColumns(AddSourceWalkIn, {{"DATE", each try Date.From(_) otherwise null, type nullable date}, {"MAIN PRODUCT", Text.From}, {"Add Ons 1", Text.From}, {"Add Ons 2", Text.From}, {"Add Ons 3", Text.From}}),
+    FixTypesLalamove = Table.TransformColumns(AddSourceLalamove, {{"DATE", each try Date.From(_) otherwise null, type nullable date}, {"MAIN PRODUCT", Text.From}, {"Add Ons 1", Text.From}, {"Add Ons 2", Text.From}, {"Add Ons 3", Text.From}}),
+    FixTypesLBC = Table.TransformColumns(AddSourceLBC, {{"DATE", each try Date.From(_) otherwise null, type nullable date}, {"MAIN PRODUCT", Text.From}, {"Add Ons 1", Text.From}, {"Add Ons 2", Text.From}, {"Add Ons 3", Text.From}}),
+
+    // Combine all
+    CombinedSales = Table.Combine({FixTypesWalkIn, FixTypesLalamove, FixTypesLBC}),
+    #"Removed Columns" = Table.RemoveColumns(CombinedSales,{"Add Ons Cost", "TOTAL PAYMEMT", "CASH", "GCASH/BANK", "BOX CONTENT", "SOURCE", "DOWNPAYMENT", "BALANCE", "SHIPPING FEE", "Delivered", "Claimed", "Deposited", "RECEIVABLE"}),
+    #"Filtered Rows" = Table.SelectRows(#"Removed Columns", each ([MAIN PRODUCT] <> null and [MAIN PRODUCT] <> "TOTAL: "))
+in
+    #"Filtered Rows"
+
+
+
+
+
+
+
+
+
+
+=IF(
+  [@[INVENTORY ITEM]] <> "", 
+  COUNTIFS(
+    _TBL_INVENTORY_TOTAL[DATE], [@DATE],
+    _TBL_INVENTORY_TOTAL[INVENTORY ITEM], [@[INVENTORY ITEM]],
+    _TBL_INVENTORY_TOTAL[OUT], [@IN]
+  ), 
+  ""
+)
+
+
+=IF(
+   [@[INVENTORY ITEM]] = "", 
+   "", 
+   SUMIFS([IN], [INVENTORY ITEM], [@[INVENTORY ITEM]], [DATE], "<=" & [@DATE]) 
+   - COUNTIFS(_TBL_SALES_TOTAL[MAIN PRODUCT], [@[INVENTORY ITEM]], _TBL_SALES_TOTAL[DATE], "<=" & [@DATE])
+   - COUNTIFS(_TBL_SALES_TOTAL[Add Ons 1], [@[INVENTORY ITEM]], _TBL_SALES_TOTAL[DATE], "<=" & [@DATE])
+   - COUNTIFS(_TBL_SALES_TOTAL[Add Ons 2], [@[INVENTORY ITEM]], _TBL_SALES_TOTAL[DATE], "<=" & [@DATE])
+   - COUNTIFS(_TBL_SALES_TOTAL[Add Ons 3], [@[INVENTORY ITEM]], _TBL_SALES_TOTAL[DATE], "<=" & [@DATE])
+   - COUNTIFS(_TBL_SALES_TOTAL[Freebies], [@[INVENTORY ITEM]], _TBL_SALES_TOTAL[DATE], "<=" & [@DATE])
+   - [@BACKJOB]
+)
+
+
+
